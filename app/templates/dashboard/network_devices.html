@@ -64,6 +64,12 @@
     filter: brightness(1.2) drop-shadow(0 0 8px rgba(78, 205, 196, 0.5));
 }
 
+.device-node.subnet-0 { fill: #4ecdc4; }
+.device-node.subnet-1 { fill: #ff6b6b; }
+.device-node.subnet-2 { fill: #ffd93d; }
+.device-node.subnet-3 { fill: #6c5ce7; }
+.device-node.subnet-4 { fill: #a8e6cf; }
+
 .device-node.router {
     filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.3));
 }
@@ -73,6 +79,7 @@
 }
 
 .device-node.core {
+    fill: #fff;
     filter: drop-shadow(0 0 12px rgba(255, 217, 61, 0.3));
 }
 
@@ -313,11 +320,10 @@ document.addEventListener('DOMContentLoaded', function() {
         scanButton.classList.add('scanning');
         scanButton.disabled = true;
         scanStatus.textContent = 'Scanning...';
-        devices = []; // Clear existing devices
-        updateDeviceList(); // Update UI to show no devices
+        devices = []; // Limpiamos los dispositivos previos
+        updateDeviceList();
         
         try {
-            // Iniciar el escaneo
             const response = await fetch('/scan_network', {
                 method: 'POST',
                 headers: {
@@ -336,13 +342,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = JSON.parse(event.data);
                 
                 if (data.device) {
-                    // Agregar nuevo dispositivo encontrado
                     devices.push(data.device);
                     renderNetworkDiagram();
                     updateDeviceList();
                     scanStatus.textContent = `Found ${devices.length} devices`;
                 } else if (data.status === 'complete') {
-                    // Escaneo completado
                     eventSource.close();
                     scanButton.classList.remove('scanning');
                     scanButton.disabled = false;
@@ -351,7 +355,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         updateDeviceList();
                     }
                 } else if (data.status === 'error') {
-                    // Error durante el escaneo
                     eventSource.close();
                     throw new Error(data.message || 'Scan failed');
                 }
@@ -375,7 +378,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const containerWidth = networkDiagram.clientWidth;
         const containerHeight = networkDiagram.clientHeight;
 
-        // Si es el primer render, crear el SVG
         if (!svg) {
             networkDiagram.innerHTML = '';
             svg = d3.select(networkDiagram)
@@ -385,7 +387,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 .call(zoom);
             svg.append('g');
         }
-
         const g = svg.select('g');
 
         // Agrupar dispositivos por subnet
@@ -397,92 +398,57 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             devicesBySubnet[subnet].push(device);
         });
-
-        // Preparar nodos y enlaces
+        
+        const subnets = Object.keys(devicesBySubnet);
         const nodes = [];
         const links = [];
-        const subnets = Object.keys(devicesBySubnet);
         
-        // Calcular posiciones para cada subnet
-        const centerX = containerWidth / 2;
+        // Layout: asignamos a cada subnet su propia área horizontal
+        const margin = 100;
+        const availableWidth = containerWidth - 2 * margin;
+        const numSubnets = subnets.length;
+        const subnetAreaWidth = availableWidth / numSubnets;
         const centerY = containerHeight / 2;
-        const subnetRadius = Math.min(containerWidth, containerHeight) * 0.35;
-        
-        // Crear nodo central si hay múltiples subnets
-        let centralNode = null;
-        if (subnets.length > 1) {
-            centralNode = {
-                id: 'central',
-                name: 'Network Core',
-                type: 'core',
-                isCenter: true,
-                x: centerX,
-                y: centerY,
-                fx: centerX,
-                fy: centerY
-            };
-            nodes.push(centralNode);
-        }
 
-        // Posicionar subnets en círculo
         subnets.forEach((subnet, i) => {
-            const angle = (2 * Math.PI * i) / subnets.length;
-            const subnetX = centerX + subnetRadius * Math.cos(angle);
-            const subnetY = centerY + subnetRadius * Math.sin(angle);
-            
-            // Encontrar el router de la subnet
-            const subnetRouter = devicesBySubnet[subnet].find(d => d.type === 'router');
-            const subnetDevices = devicesBySubnet[subnet].filter(d => d.type !== 'router');
-            
-            // Agregar router si existe
-            if (subnetRouter) {
-                subnetRouter.subnet = subnet;
-                subnetRouter.isSubnetRouter = true;
-                subnetRouter.x = subnetX;
-                subnetRouter.y = subnetY;
-                subnetRouter.fx = subnetX;
-                subnetRouter.fy = subnetY;
-                nodes.push(subnetRouter);
-                
-                // Conectar al nodo central si existe
-                if (centralNode) {
-                    links.push({
-                        source: centralNode,
-                        target: subnetRouter,
-                        isBackbone: true
-                    });
-                }
+            // Calculamos la posición central para cada subnet
+            const centerX = margin + subnetAreaWidth * i + subnetAreaWidth / 2;
+            const subnetDevices = devicesBySubnet[subnet];
+            // Buscamos el router; en su defecto usaremos el primer dispositivo
+            let router = subnetDevices.find(d => d.type === 'router');
+            if (!router) {
+                router = subnetDevices[0];
             }
-
-            // Posicionar dispositivos alrededor del router
-            const deviceRadius = subnetRadius * 0.3;
+            // Asignamos un índice de subnet para aplicar el color
+            router.subnetIndex = i;
+            router.x = centerX;
+            router.y = centerY;
+            router.fx = centerX;
+            router.fy = centerY;
+            router.isRouter = true;
+            nodes.push(router);
+            
+            // Posicionar los demás dispositivos en un círculo alrededor del router
+            const deviceRadius = Math.min(subnetAreaWidth, containerHeight) * 0.3;
             subnetDevices.forEach((device, j) => {
-                const deviceAngle = (2 * Math.PI * j) / subnetDevices.length;
-                device.subnet = subnet;
-                device.x = subnetX + deviceRadius * Math.cos(deviceAngle);
-                device.y = subnetY + deviceRadius * Math.sin(deviceAngle);
+                if (device === router) return;
+                device.subnetIndex = i;
+                const angle = (2 * Math.PI * j) / (subnetDevices.length - 1);
+                device.x = centerX + deviceRadius * Math.cos(angle);
+                device.y = centerY + deviceRadius * Math.sin(angle);
                 nodes.push(device);
-                
-                // Conectar al router de la subnet o al nodo central
-                if (subnetRouter) {
-                    links.push({
-                        source: subnetRouter,
-                        target: device
-                    });
-                } else if (centralNode) {
-                    links.push({
-                        source: centralNode,
-                        target: device
-                    });
-                }
+                links.push({
+                    source: router,
+                    target: device
+                });
             });
         });
 
-        // Actualizar simulación
+        // Configurar fuerza de la simulación
         if (!simulation) {
             simulation = d3.forceSimulation(nodes)
                 .force("charge", d3.forceManyBody().strength(-300))
-                .force("link", d3.forceLink(links).distance(d => d.isBackbone ? 200 : 100).strength(1))
+                .force("link", d3.forceLink(links).distance(100).strength(1))
                 .force("collision", d3.forceCollide().radius(40))
                 .force("x", d3.forceX(d => d.x).strength(0.1))
                 .force("y", d3.forceY(d => d.y).strength(0.1));
@@ -495,53 +461,52 @@ document.addEventListener('DOMContentLoaded', function() {
         // Actualizar enlaces
         const link = g.selectAll("line.connection-line")
             .data(links);
-            
+
         const linkEnter = link.enter()
             .append("line")
-            .attr("class", d => `connection-line${d.isBackbone ? ' backbone' : ''}`);
+            .attr("class", "connection-line");
             
         link.merge(linkEnter);
         link.exit().remove();
 
         // Actualizar nodos
         const node = g.selectAll("circle.device-node")
-            .data(nodes);
-            
+            .data(nodes, d => d.ip);
+
         const nodeEnter = node.enter()
             .append("circle")
-            .attr("class", d => `device-node${d.type ? ' ' + d.type : ''}`)
-            .attr("r", d => {
-                if (d.isCenter) return 25;
-                if (d.isSubnetRouter) return 20;
-                return 15;
+            .attr("r", d => d.isRouter ? 20 : 15)
+            .attr("class", d => {
+                let cls = "device-node";
+                if (d.type) cls += " " + d.type;
+                if (d.subnetIndex !== undefined) cls += " subnet-" + d.subnetIndex;
+                return cls;
             });
-            
+
         node.merge(nodeEnter)
             .call(d3.drag()
                 .on("start", dragstarted)
                 .on("drag", dragged)
                 .on("end", dragended));
-                
+
         node.exit().remove();
 
         // Actualizar etiquetas
         const label = g.selectAll("text.device-label")
-            .data(nodes);
-            
+            .data(nodes, d => d.ip);
+
         const labelEnter = label.enter()
             .append("text")
             .attr("class", "device-label")
-            .attr("dy", d => d.isCenter ? 35 : 25);
-            
+            .attr("dy", d => d.isRouter ? 30 : 25);
+
         label.merge(labelEnter)
             .text(d => {
-                if (d.isCenter) return "Network Core";
-                return `${d.name}\n${d.ip || ''}`;
+                return d.isRouter ? `${d.name} (${d.ip})` : d.name;
             });
             
         label.exit().remove();
 
-        // Actualizar posiciones en cada tick
         simulation.on("tick", () => {
             g.selectAll("line.connection-line")
                 .attr("x1", d => d.source.x)
@@ -572,7 +537,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function dragended(event, d) {
         if (!event.active) simulation.alphaTarget(0);
-        if (!d.isCenter && !d.isSubnetRouter) {
+        if (!d.isRouter) {
             d.fx = null;
             d.fy = null;
         }
@@ -591,8 +556,7 @@ document.addEventListener('DOMContentLoaded', function() {
         svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
     });
 
-    // Agregar evento al botón de escaneo
     scanButton.addEventListener('click', scanNetwork);
 });
 </script>
-{% endblock %} 
+{% endblock %}
