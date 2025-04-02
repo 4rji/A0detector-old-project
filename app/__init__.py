@@ -10,6 +10,7 @@ import concurrent.futures
 from queue import Queue
 import threading
 from .network_scanner import ping, get_device_info
+import dns.resolver
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
@@ -20,15 +21,74 @@ discovered_devices = Queue()
 
 def get_device_info(ip):
     """Get device information for a given IP."""
+    hostname = None
+    
     try:
-        # Intentar obtener el hostname
+        # Primer intento: usar gethostbyaddr (método estándar)
         hostname = socket.gethostbyaddr(ip)[0]
     except:
-        hostname = f"Device-{ip.split('.')[-1]}"
+        try:
+            # Segundo intento: usar avahi-resolve en Linux (si está disponible)
+            if os.name == 'posix' and os.path.exists('/usr/bin/avahi-resolve'):
+                try:
+                    result = subprocess.check_output(['avahi-resolve', '-a', ip], stderr=subprocess.STDOUT, timeout=1).decode('utf-8')
+                    if result:
+                        hostname = result.split()[-1].strip()
+                except:
+                    pass
+
+            # Tercer intento: usar nmblookup para nombres NetBIOS (Windows/Samba)
+            if not hostname and os.name == 'posix' and os.path.exists('/usr/bin/nmblookup'):
+                try:
+                    result = subprocess.check_output(['nmblookup', '-A', ip], stderr=subprocess.STDOUT, timeout=1).decode('utf-8')
+                    for line in result.splitlines():
+                        if '<00>' in line and not '<GROUP>' in line:
+                            hostname = line.split()[0].strip()
+                            break
+                except:
+                    pass
+
+            # Cuarto intento: intentar resolver usando DNS reverso local
+            if not hostname:
+                try:
+                    resolver = dns.resolver.Resolver()
+                    resolver.timeout = 1
+                    resolver.lifetime = 1
+                    addr = dns.reversename.from_address(ip)
+                    answer = resolver.resolve(addr, "PTR")
+                    if answer:
+                        hostname = str(answer[0]).rstrip('.')
+                except:
+                    pass
+        except:
+            pass
+
+    # Si no se pudo obtener el hostname, usar un nombre genérico
+    if not hostname:
+        # Intentar determinar el tipo de dispositivo por el fabricante de la MAC
+        try:
+            if os.name == 'posix':
+                arp_output = subprocess.check_output(['arp', '-n'], stderr=subprocess.STDOUT).decode('utf-8')
+                mac_match = re.search(f'{ip}\\s+\\w+\\s+([0-9a-f:]+)', arp_output.lower())
+            else:  # Windows
+                arp_output = subprocess.check_output(['arp', '-a'], stderr=subprocess.STDOUT).decode('utf-8')
+                mac_match = re.search(f'{ip}\\s+([0-9a-f-]+)', arp_output.lower())
+            
+            if mac_match:
+                mac = mac_match.group(1)
+                vendor = get_vendor_from_mac(mac)
+                if vendor:
+                    hostname = f"{vendor}-{ip.split('.')[-1]}"
+                else:
+                    hostname = f"Device-{ip.split('.')[-1]}"
+            else:
+                hostname = f"Device-{ip.split('.')[-1]}"
+        except:
+            hostname = f"Device-{ip.split('.')[-1]}"
     
-    # Intentar obtener la MAC address usando arp
+    # Obtener la MAC address
     try:
-        if os.name == 'posix':  # Linux/Mac
+        if os.name == 'posix':
             arp_output = subprocess.check_output(['arp', '-n'], stderr=subprocess.STDOUT).decode('utf-8')
             mac_match = re.search(f'{ip}\\s+\\w+\\s+([0-9a-f:]+)', arp_output.lower())
         else:  # Windows
@@ -39,8 +99,13 @@ def get_device_info(ip):
     except:
         mac = "Unknown"
     
-    # Determinar si es un router basado en el patrón de IP
-    is_router = ip.endswith('.1') or ip.endswith('.254')
+    # Determinar si es un router basado en el patrón de IP y nombre
+    is_router = (
+        ip.endswith('.1') or 
+        ip.endswith('.254') or 
+        'router' in hostname.lower() or 
+        'gateway' in hostname.lower()
+    )
     
     return {
         'id': ip.split('.')[-1],  # Usar el último octeto como ID
@@ -49,6 +114,37 @@ def get_device_info(ip):
         'mac': mac,
         'type': 'router' if is_router else 'device'
     }
+
+def get_vendor_from_mac(mac):
+    """Get vendor name from MAC address using common prefixes."""
+    # Normalizar el formato de la MAC
+    mac = mac.replace('-', ':').lower()
+    prefix = mac[:8]  # Tomar los primeros 3 bytes (XX:XX:XX)
+    
+    # Diccionario de prefijos MAC comunes y sus fabricantes
+    vendors = {
+        '00:50:56': 'VMware',
+        '00:0c:29': 'VMware',
+        '00:1c:14': 'VMware',
+        '00:1c:42': 'Parallels',
+        '08:00:27': 'VirtualBox',
+        'dc:a6:32': 'Raspberry',
+        'b8:27:eb': 'Raspberry',
+        '00:1a:11': 'Google',
+        'f4:03:43': 'Apple',
+        '00:14:22': 'Dell',
+        '00:50:ba': 'HP',
+        '00:21:b7': 'Lenovo',
+        '00:26:18': 'ASUSTek',
+        '00:1f:3a': 'Intel',
+        '00:e0:4c': 'Realtek',
+        'd8:3a:dd': 'Intel',
+        '00:25:90': 'Super Micro',
+        '00:1b:21': 'Intel',
+        '00:1e:67': 'Intel'
+    }
+    
+    return vendors.get(prefix)
 
 def load_settings():
     """Load network settings from settings.json"""
