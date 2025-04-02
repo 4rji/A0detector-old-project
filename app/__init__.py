@@ -10,6 +10,7 @@ import concurrent.futures
 from queue import Queue
 import threading
 from .network_scanner import ping, get_device_info
+from .scan_storage import ScanStorage
 import dns.resolver
 
 # Configurar logging
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 # Cola global para almacenar los dispositivos descubiertos
 discovered_devices = Queue()
+
+# Inicializar el almacenamiento de escaneos
+scan_storage = ScanStorage()
 
 def get_device_info(ip):
     """Get device information for a given IP."""
@@ -176,6 +180,9 @@ def scan_network_worker():
         
         logger.info(f"Total IPs to scan: {len(ips_to_scan)}")
         
+        # Lista para almacenar los dispositivos encontrados
+        found_devices = []
+        
         # Usar ThreadPoolExecutor para hacer ping en paralelo
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
             # Mapear las IPs a la función ping
@@ -189,8 +196,12 @@ def scan_network_worker():
                         logger.info(f"Found active host: {ip}")
                         device_info = get_device_info(ip)
                         discovered_devices.put(device_info)
+                        found_devices.append(device_info)
                 except Exception as e:
                     logger.error(f"Error processing {ip}: {str(e)}")
+        
+        # Guardar los resultados del escaneo
+        scan_storage.save_scan(found_devices)
         
         # Enviar señal de finalización
         discovered_devices.put({'status': 'complete'})
@@ -248,5 +259,19 @@ def create_app():
                     break
         
         return Response(generate(), mimetype='text/event-stream')
+
+    @app.route('/scan_network/last')
+    def get_last_scan():
+        """Endpoint to get the results of the last scan."""
+        last_scan = scan_storage.get_last_scan()
+        if last_scan:
+            return jsonify(last_scan)
+        return jsonify({'error': 'No scan results available'}), 404
+
+    @app.route('/scan_network/history')
+    def get_scan_history():
+        """Endpoint to get the scan history."""
+        history = scan_storage.get_scan_history()
+        return jsonify(history)
 
     return app

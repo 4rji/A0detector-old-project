@@ -291,6 +291,29 @@ document.addEventListener('DOMContentLoaded', function() {
             svg.select('g').attr('transform', event.transform);
         });
 
+    // Cargar el último escaneo al iniciar
+    async function loadLastScan() {
+        try {
+            const response = await fetch('/scan_network/last');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.devices) {
+                    devices = data.devices;
+                    const scanDate = new Date(data.timestamp).toLocaleString();
+                    scanStatus.textContent = `Last scan: ${scanDate} - Found ${devices.length} devices`;
+                    renderNetworkDiagram();
+                    updateDeviceList();
+                }
+            }
+        } catch (error) {
+            console.error('Error loading last scan:', error);
+            scanStatus.textContent = 'No previous scan found';
+        }
+    }
+
+    // Cargar el último escaneo al iniciar la página
+    loadLastScan();
+
     function updateDeviceList() {
         deviceList.innerHTML = '';
         
