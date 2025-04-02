@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from dotenv import load_dotenv
 import subprocess
 import json
@@ -7,23 +7,16 @@ import os
 import socket
 import logging
 import concurrent.futures
+from queue import Queue
+import threading
+from .network_scanner import ping, get_device_info
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-def ping(ip):
-    """Ping a single IP address and return True if host is up."""
-    try:
-        # Run ping command and capture output
-        result = subprocess.run(['ping', '-c', '1', ip], 
-                              stdout=subprocess.PIPE, 
-                              stderr=subprocess.PIPE,
-                              text=True)
-        # Check if we got a successful response (64 bytes)
-        return "64 bytes" in result.stdout
-    except:
-        return False
+# Cola global para almacenar los dispositivos descubiertos
+discovered_devices = Queue()
 
 def get_device_info(ip):
     """Get device information for a given IP."""
@@ -35,8 +28,13 @@ def get_device_info(ip):
     
     # Intentar obtener la MAC address usando arp
     try:
-        arp_output = subprocess.check_output(['arp', '-n'], stderr=subprocess.STDOUT).decode('utf-8')
-        mac_match = re.search(f'{ip}\\s+\\w+\\s+([0-9a-f:]+)', arp_output.lower())
+        if os.name == 'posix':  # Linux/Mac
+            arp_output = subprocess.check_output(['arp', '-n'], stderr=subprocess.STDOUT).decode('utf-8')
+            mac_match = re.search(f'{ip}\\s+\\w+\\s+([0-9a-f:]+)', arp_output.lower())
+        else:  # Windows
+            arp_output = subprocess.check_output(['arp', '-a'], stderr=subprocess.STDOUT).decode('utf-8')
+            mac_match = re.search(f'{ip}\\s+([0-9a-f-]+)', arp_output.lower())
+        
         mac = mac_match.group(1) if mac_match else "Unknown"
     except:
         mac = "Unknown"
@@ -45,26 +43,65 @@ def get_device_info(ip):
     is_router = ip.endswith('.1') or ip.endswith('.254')
     
     return {
+        'id': ip.split('.')[-1],  # Usar el último octeto como ID
         'name': hostname,
         'ip': ip,
         'mac': mac,
         'type': 'router' if is_router else 'device'
     }
 
-def get_network_ip():
-    """Get the real network IP address of the machine."""
+def load_settings():
+    """Load network settings from settings.json"""
     try:
-        # Create a socket connection to an external server
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # We don't actually connect, we just use this to get the local IP
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except:
-        # Fallback to hostname if the above method fails
-        hostname = socket.gethostname()
-        return socket.gethostbyname(hostname)
+        if os.path.exists('settings.json'):
+            with open('settings.json', 'r') as f:
+                settings = json.load(f)
+                return settings.get('subnets', ['192.168.1'])
+        return ['192.168.1']  # Default subnet if no settings file
+    except Exception as e:
+        logger.error(f"Error loading settings: {e}")
+        return ['192.168.1']  # Default subnet on error
+
+def scan_network_worker():
+    """Worker function to perform network scanning in background."""
+    try:
+        logger.info("Starting network scan...")
+        
+        # Cargar subredes configuradas
+        subnets = load_settings()
+        logger.info(f"Scanning configured subnets: {subnets}")
+        
+        # Crear lista de IPs a escanear para cada subred
+        ips_to_scan = []
+        for subnet in subnets:
+            # Asegurar que la subred tenga el formato correcto
+            base_subnet = subnet.rstrip('.')  # Eliminar punto final si existe
+            ips_to_scan.extend([f"{base_subnet}.{i}" for i in range(1, 255)])
+        
+        logger.info(f"Total IPs to scan: {len(ips_to_scan)}")
+        
+        # Usar ThreadPoolExecutor para hacer ping en paralelo
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+            # Mapear las IPs a la función ping
+            future_to_ip = {executor.submit(ping, ip): ip for ip in ips_to_scan}
+            
+            # Procesar los resultados conforme se completan
+            for future in concurrent.futures.as_completed(future_to_ip):
+                ip = future_to_ip[future]
+                try:
+                    if future.result():  # Si el ping fue exitoso
+                        logger.info(f"Found active host: {ip}")
+                        device_info = get_device_info(ip)
+                        discovered_devices.put(device_info)
+                except Exception as e:
+                    logger.error(f"Error processing {ip}: {str(e)}")
+        
+        # Enviar señal de finalización
+        discovered_devices.put({'status': 'complete'})
+        
+    except Exception as e:
+        logger.error(f"Error during network scan: {str(e)}")
+        discovered_devices.put({'status': 'error', 'message': str(e)})
 
 def create_app():
     app = Flask(__name__)
@@ -77,47 +114,43 @@ def create_app():
     app.register_blueprint(dashboard, url_prefix='/dashboard')
     
     @app.route('/scan_network', methods=['POST'])
-    def scan_network():
-        """Endpoint to scan the network for connected devices using ping sweep."""
-        try:
-            logger.info("Starting network scan...")
-            devices = []
-            
-            # Obtener la IP real de la red
-            ip_addr = get_network_ip()
-            subnet = '.'.join(ip_addr.split('.')[:3])
-            
-            logger.info(f"Using network IP: {ip_addr}")
-            logger.info(f"Scanning subnet: {subnet}.0/24")
-            
-            # Crear lista de IPs a escanear
-            ips_to_scan = [f"{subnet}.{i}" for i in range(1, 255)]
-            
-            # Usar ThreadPoolExecutor para hacer ping en paralelo
-            with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
-                # Mapear las IPs a la función ping
-                future_to_ip = {executor.submit(ping, ip): ip for ip in ips_to_scan}
-                
-                # Procesar los resultados conforme se completan
-                for future in concurrent.futures.as_completed(future_to_ip):
-                    ip = future_to_ip[future]
-                    try:
-                        if future.result():  # Si el ping fue exitoso
-                            logger.info(f"Found active host: {ip}")
-                            device_info = get_device_info(ip)
-                            devices.append(device_info)
-                    except Exception as e:
-                        logger.error(f"Error processing {ip}: {str(e)}")
-            
-            # Asignar IDs únicos
-            for i, device in enumerate(devices):
-                device['id'] = i + 1
-            
-            logger.info(f"Scan complete. Found {len(devices)} devices")
-            return jsonify({'devices': devices})
-            
-        except Exception as e:
-            logger.error(f"Error during network scan: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+    def start_network_scan():
+        """Endpoint to start network scanning process."""
+        # Limpiar la cola de dispositivos descubiertos
+        while not discovered_devices.empty():
+            discovered_devices.get()
+        
+        # Iniciar el escaneo en un hilo separado
+        scan_thread = threading.Thread(target=scan_network_worker)
+        scan_thread.daemon = True
+        scan_thread.start()
+        
+        return jsonify({'status': 'started'})
+    
+    @app.route('/scan_network/events')
+    def network_scan_events():
+        """Endpoint for Server-Sent Events to receive real-time updates."""
+        def generate():
+            while True:
+                try:
+                    # Obtener el siguiente dispositivo o mensaje de estado
+                    data = discovered_devices.get(timeout=30)
+                    
+                    # Si es un mensaje de estado, enviar y terminar
+                    if isinstance(data, dict) and 'status' in data:
+                        yield f"data: {json.dumps(data)}\n\n"
+                        if data['status'] in ['complete', 'error']:
+                            break
+                        continue
+                    
+                    # Enviar el dispositivo descubierto
+                    yield f"data: {json.dumps({'device': data})}\n\n"
+                    
+                except Exception as e:
+                    logger.error(f"Error in event stream: {str(e)}")
+                    yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+                    break
+        
+        return Response(generate(), mimetype='text/event-stream')
 
     return app

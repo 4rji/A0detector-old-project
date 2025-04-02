@@ -1,0 +1,113 @@
+.settings-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background-color: rgba(20, 20, 30, 0.9);
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.settings-section {
+    margin-bottom: 2rem;
+}
+
+.settings-section h2 {
+    color: #4ECDC4;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.settings-section h3 {
+    color: #fff;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+
+#subnet-form {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+#subnet-input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 2px solid rgba(78, 205, 196, 0.3);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 1rem;
+}
+
+#subnet-input:focus {
+    outline: none;
+    border-color: #4ECDC4;
+}
+
+#subnet-form button {
+    padding: 0.75rem 1.5rem;
+    background-color: #4ECDC4;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#subnet-form button:hover {
+    background-color: #45b8b0;
+}
+
+.subnet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.subnet-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(78, 205, 196, 0.2);
+}
+
+.subnet-text {
+    color: #fff;
+    font-size: 1rem;
+}
+
+.delete-subnet {
+    background: none;
+    border: none;
+    color: #ff6b6b;
+    cursor: pointer;
+    padding: 0.5rem;
+    font-size: 1rem;
+    transition: color 0.2s;
+}
+
+.delete-subnet:hover {
+    color: #ff5252;
+}
+
+.settings-info {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.error-message {
+    color: #ff6b6b;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.success-message {
+    color: #4ECDC4;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+} 
