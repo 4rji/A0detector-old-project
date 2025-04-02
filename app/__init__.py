@@ -51,6 +51,21 @@ def get_device_info(ip):
         'type': 'router' if is_router else 'device'
     }
 
+def get_network_ip():
+    """Get the real network IP address of the machine."""
+    try:
+        # Create a socket connection to an external server
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # We don't actually connect, we just use this to get the local IP
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        # Fallback to hostname if the above method fails
+        hostname = socket.gethostname()
+        return socket.gethostbyname(hostname)
+
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'your-secret-key'  # Change this in production
@@ -65,11 +80,11 @@ def create_app():
             logger.info("Starting network scan...")
             devices = []
             
-            # Obtener la IP local y la subred
-            hostname = socket.gethostname()
-            ip_addr = socket.gethostbyname(hostname)
+            # Obtener la IP real de la red
+            ip_addr = get_network_ip()
             subnet = '.'.join(ip_addr.split('.')[:3])
             
+            logger.info(f"Using network IP: {ip_addr}")
             logger.info(f"Scanning subnet: {subnet}.0/24")
             
             # Crear lista de IPs a escanear
