@@ -240,6 +240,71 @@
             border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+
+        /* Sidebar styles */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            width: 250px;
+            background-color: rgba(45, 45, 45, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 1rem 0;
+            z-index: 100;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-brand {
+            padding: 0 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .sidebar-brand h1 {
+            font-size: 1.5rem;
+            color: #ff6b6b;
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.3);
+        }
+
+        .sidebar-nav {
+            list-style: none;
+            padding: 0;
+        }
+
+        .sidebar-nav-item {
+            margin: 0.5rem 0;
+        }
+
+        .sidebar-nav-link {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 1.5rem;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .sidebar-nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        .sidebar-nav-link.active {
+            background-color: rgba(255, 107, 107, 0.2);
+            color: #ff6b6b;
+            border-left: 3px solid #ff6b6b;
+        }
+
+        .sidebar-nav-link i {
+            margin-right: 1rem;
+            font-size: 1.2rem;
+        }
+
+        /* Adjust main content to account for sidebar */
+        .main-content {
+            margin-left: 250px;
+            width: calc(100% - 250px);
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
@@ -255,7 +320,41 @@
         {% endif %}
     {% endwith %}
     
+    {% if session.get('user_id') %}
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <h1>AI Detector</h1>
+        </div>
+        <ul class="sidebar-nav">
+            <li class="sidebar-nav-item">
+                <a href="{{ url_for('dashboard.index') }}" class="sidebar-nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
+                    <i class="fas fa-chart-line"></i>
+                    Dashboard
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{{ url_for('dashboard.network_devices') }}" class="sidebar-nav-link {% if request.endpoint == 'dashboard.network_devices' %}active{% endif %}">
+                    <i class="fas fa-network-wired"></i>
+                    Network Devices
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{{ url_for('dashboard.settings') }}" class="sidebar-nav-link {% if request.endpoint == 'dashboard.settings' %}active{% endif %}">
+                    <i class="fas fa-cog"></i>
+                    Settings
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <div class="main-content">
+    {% endif %}
+    
     {% block content %}{% endblock %}
+    
+    {% if session.get('user_id') %}
+    </div>
+    {% endif %}
+    
     {% block scripts %}{% endblock %}
 </body>
 </html> 

@@ -71,7 +71,10 @@ def create_app():
     app.config['SECRET_KEY'] = 'your-secret-key'  # Change this in production
 
     from .auth import auth
+    from .dashboard import dashboard
+    
     app.register_blueprint(auth)
+    app.register_blueprint(dashboard, url_prefix='/dashboard')
     
     @app.route('/scan_network', methods=['POST'])
     def scan_network():
@@ -114,7 +117,7 @@ def create_app():
             return jsonify({'devices': devices})
             
         except Exception as e:
-            logger.error(f"Error scanning network: {str(e)}")
+            logger.error(f"Error during network scan: {str(e)}")
             return jsonify({'error': str(e)}), 500
-    
+
     return app
