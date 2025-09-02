@@ -430,10 +430,12 @@
     </div>
 
     <!-- Incluir D3.js -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>    <script>
-    let isScanning = false;
-    // token para invalidar renders si hiciera falta en el futuro
-    let diagramBuildToken = 0;
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <script>
+        let isScanning = false;
+        // token para cancelar animaciones en curso si se inicia un nuevo escaneo
+        let diagramBuildToken = 0;
 
         // Cargar redes guardadas al iniciar
         document.addEventListener('DOMContentLoaded', function() {
@@ -477,8 +479,6 @@
         function createNetworkDiagram(devices) {
             const diagramContent = document.getElementById('diagramContent');
             const diagram = document.getElementById('networkDiagram');
-            // invalidar renders anteriores
-            const myBuild = ++diagramBuildToken;
             
             // Limpiar contenido anterior
             diagramContent.innerHTML = '';
@@ -489,7 +489,7 @@
             }
             
             // Configurar dimensiones
-            const containerWidth = diagram.clientWidth - 40; // Restar padding
+            const containerWidth = diagram.clientWidth - 40;
             const containerHeight = diagram.clientHeight - 40;
             
             // Crear SVG
@@ -508,116 +508,50 @@
             svg.call(zoom);
             const g = svg.append('g');
             
-            // Datos completos objetivo
-            const fullNodes = [
-                { id: 'router', name: 'Router', type: 'router', ip: 'Gateway', fx: containerWidth / 2, fy: containerHeight / 2 }
-            ];
-            devices.forEach((device) => {
-                fullNodes.push({
-                    id: device.ip,
-                    name: device.hostname === 'Unknown' ? device.ip.split('.').pop() : device.hostname,
-                    type: 'device',
-                    ip: device.ip,
-                    shortIP: device.ip.split('.').pop()
-                });
-            });
-            const fullLinks = devices.map(device => ({ source: 'router', target: device.ip }));
-
-            // Estado incremental (arrancamos solo con el router)
-            const nodes = [ fullNodes[0] ];
-            const links = [];
+            // Preparar datos - estructura como en el código original
+            const nodes = devices.map((device, index) => ({
+                id: index + 1,
+                name: `Device-${device.ip.split('.').pop()}`,
+                type: 'device',
+                ip: device.ip
+            }));
             
-            // Configurar simulación de fuerzas
-            const simulation = d3.forceSimulation(nodes)
-                .force("charge", d3.forceManyBody().strength(-300))
-                .force("center", d3.forceCenter(containerWidth / 2, containerHeight / 2))
-                .force("link", d3.forceLink(links).id(d => d.id).distance(150).strength(0.8))
-                .force("collision", d3.forceCollide().radius(35));
+            // Agregar router al principio
+            nodes.unshift({
+                id: 0,
+                name: 'Router',
+                type: 'router',
+                ip: '0.0.0.0'
+            });
             
             // Crear líneas de conexión
-            let link = g.selectAll("line")
+            const link = g.selectAll("line")
                 .data(links)
                 .enter()
                 .append("line")
-                .attr("class", "connection-line")
-                .style("opacity", 0);
+                .attr("class", "connection-line");
             
             // Crear nodos
-            let node = g.selectAll("circle")
-                .data(nodes, d => d.id)
+            const node = g.selectAll("circle")
+                .data(nodes)
                 .enter()
                 .append("circle")
                 .attr("class", d => `device-node ${d.type}`)
-                .attr("r", d => d.type === 'router' ? 25 : 20)
+                .attr("r", d => d.type === 'router' ? 20 : 15)
                 .attr("fill", d => d.type === 'router' ? "#ff6b6b" : "#4ecdc4")
-                .style("opacity", d => d.type === 'router' ? 1 : 0)
                 .call(d3.drag()
                     .on("start", dragstarted)
                     .on("drag", dragged)
                     .on("end", dragended));
             
             // Agregar etiquetas
-            let labels = g.selectAll("text")
-                .data(nodes, d => d.id)
+            const labels = g.selectAll("text")
+                .data(nodes)
                 .enter()
                 .append("text")
                 .attr("class", "device-label")
-                .text(d => d.type === 'router' ? 'Router' : d.shortIP)
-                .attr("dy", 35)
-                .style("opacity", d => d.type === 'router' ? 1 : 0);
-            
-            // Agregar tooltips
-            node.append("title")
-                .text(d => d.type === 'router' ? 'Network Gateway' : `IP: ${d.ip}\nHost: ${d.name}`);
-
-            // función para re-bind y transicionar al agregar elementos
-            function refreshSelections() {
-                link = g.selectAll("line").data(links);
-                link.enter().append("line").attr("class", "connection-line").style("opacity", 0).merge(link)
-                    .transition().duration(300).style("opacity", 1);
-                link.exit().remove();
-
-                node = g.selectAll("circle").data(nodes, d => d.id);
-                const nodeEnter = node.enter().append("circle")
-                    .attr("class", d => `device-node ${d.type}`)
-                    .attr("r", d => d.type === 'router' ? 25 : 20)
-                    .attr("fill", d => d.type === 'router' ? "#ff6b6b" : "#4ecdc4")
-                    .style("opacity", 0)
-                    .call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended));
-                node = nodeEnter.merge(node);
-                nodeEnter.transition().duration(300).style("opacity", 1);
-
-                labels = g.selectAll("text").data(nodes, d => d.id);
-                const labelsEnter = labels.enter().append("text")
-                    .attr("class", "device-label")
-                    .text(d => d.type === 'router' ? 'Router' : d.shortIP)
-                    .attr("dy", 35)
-                    .style("opacity", 0);
-                labels = labelsEnter.merge(labels);
-                labelsEnter.transition().duration(300).style("opacity", 1);
-
-                // tooltips para nuevos nodos
-                nodeEnter.append("title").text(d => d.type === 'router' ? 'Network Gateway' : `IP: ${d.ip}\nHost: ${d.name}`);
-
-                simulation.nodes(nodes);
-                simulation.force("link").links(links);
-                simulation.alpha(0.6).restart();
-            }
-
-            // Agregar dispositivos progresivamente
-            let i = 1; // 0 es el router
-            const stepDelay = Math.max(80, 800 / Math.max(1, devices.length)); // ajustar según cantidad
-            function stepAdd() {
-                if (myBuild !== diagramBuildToken) return; // cancelado por nuevo render
-                if (i >= fullNodes.length) return; // terminado
-                nodes.push(fullNodes[i]);
-                links.push({ source: 'router', target: fullNodes[i].id });
-                refreshSelections();
-                i++;
-                setTimeout(stepAdd, stepDelay);
-            }
-            // iniciar progresivo
-            setTimeout(stepAdd, stepDelay);
+                .text(d => d.type === 'router' ? 'Router' : d.ip.split('.').pop())
+                .attr("dy", 25);
             
             // Configurar eventos de simulación
             simulation.on("tick", () => {
@@ -648,27 +582,23 @@
             
             function dragstarted(event, d) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();
-                if (d.type !== 'router') { // Solo permitir arrastrar dispositivos, no el router
-                    d.fx = d.x;
-                    d.fy = d.y;
-                }
+                d.fx = d.x;
+                d.fy = d.y;
             }
             
             function dragged(event, d) {
-                if (d.type !== 'router') {
-                    d.fx = event.x;
-                    d.fy = event.y;
-                }
+                d.fx = event.x;
+                d.fy = event.y;
             }
             
             function dragended(event, d) {
                 if (!event.active) simulation.alphaTarget(0);
-                if (d.type !== 'router') {
-                    d.fx = null;
-                    d.fy = null;
-                }
+                d.fx = null;
+                d.fy = null;
             }
         }
+            
+    // ...el resto del archivo permanece igual...
 
         function scanNetwork() {
             if (isScanning) return;
@@ -692,91 +622,147 @@
                 });
         }
 
-        function createNetworkDiagram(devices) {
-            const diagramContent = document.getElementById('diagramContent');
-            const diagram = document.getElementById('networkDiagram');
-            const myBuild = ++diagramBuildToken;
-
-            diagramContent.innerHTML = '';
-            if (devices.length === 0) {
-                diagramContent.innerHTML = '<p style="color: #ccc; text-align: center; margin-top: 100px;">No devices found to display</p>';
+        function scanCustomNetwork() {
+            const network = document.getElementById('customNetwork').value.trim();
+            if (!network) {
+                alert('Please enter a network range (e.g., 192.168.1.0/24)');
                 return;
             }
-
-            const containerWidth = diagram.clientWidth;
-            const containerHeight = diagram.clientHeight;
-
-            const svg = d3.select(diagramContent)
-                .append('svg')
-                .attr('width', containerWidth)
-                .attr('height', containerHeight);
-
-            const zoom = d3.zoom()
-                .scaleExtent([0.5, 3])
-                .on('zoom', (event) => {
-                    g.attr('transform', event.transform);
+            
+            if (isScanning) return;
+            
+            isScanning = true;
+            updateScanButtons();
+            showLoading();
+            
+            fetch('/scan_custom', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ network: network })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    displayResults(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Error scanning custom network');
+                })
+                .finally(() => {
+                    isScanning = false;
+                    updateScanButtons();
                 });
-            svg.call(zoom);
+        }
 
-            const g = svg.append('g');
+        function saveNetwork() {
+            const name = document.getElementById('newNetworkName').value.trim();
+            const network = document.getElementById('newNetworkRange').value.trim();
+            
+            if (!name || !network) {
+                alert('Please enter both network name and range');
+                return;
+            }
+            
+            fetch('/save_network', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name: name, network: network })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('newNetworkName').value = '';
+                        document.getElementById('newNetworkRange').value = '';
+                        loadSavedNetworks();
+                        alert('Network saved successfully!');
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error saving network');
+                });
+        }
 
-            // Nodos y enlaces al estilo original
-            const nodes = [];
-            const links = [];
-            // router como primer nodo
-            nodes.push({ id: 0, name: 'Router', type: 'router', ip: 'Gateway' });
-            // resto de dispositivos
-            devices.forEach((d, idx) => {
-                nodes.push({ id: idx + 1, name: d.hostname || `Device-${idx+1}`, type: 'device', ip: d.ip });
-                // enlazar cada dispositivo con el router (index 0)
-                links.push({ source: 0, target: idx + 1 });
-            });
+        function deleteNetwork(network) {
+            if (!confirm('Are you sure you want to delete this network?')) {
+                return;
+            }
+            
+            fetch('/delete_network', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ network: network })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        loadSavedNetworks();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error deleting network');
+                });
+        }
 
-            const simulation = d3.forceSimulation(nodes)
-                .force('charge', d3.forceManyBody().strength(-200))
-                .force('center', d3.forceCenter(containerWidth / 2, containerHeight / 2))
-                .force('link', d3.forceLink(links).distance(150).strength(1))
-                .force('collision', d3.forceCollide().radius(50));
+        function scanSavedNetwork(network) {
+            if (isScanning) return;
+            
+            isScanning = true;
+            updateScanButtons();
+            showLoading();
+            
+            fetch('/scan_custom', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ network: network })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    displayResults(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Error scanning saved network');
+                })
+                .finally(() => {
+                    isScanning = false;
+                    updateScanButtons();
+                });
+        }
 
-            const link = g.selectAll('line')
-                .data(links)
-                .enter()
-                .append('line')
-                .attr('class', 'connection-line');
-
-            const node = g.selectAll('circle')
-                .data(nodes)
-                .enter()
-                .append('circle')
-                .attr('class', d => `device-node ${d.type === 'router' ? 'router' : ''}`)
-                .attr('r', d => d.type === 'router' ? 20 : 15)
-                .attr('fill', d => d.type === 'router' ? '#ff6b6b' : '#4ecdc4')
-                .call(d3.drag()
-                    .on('start', dragstarted)
-                    .on('drag', dragged)
-                    .on('end', dragended));
-
-            const labels = g.selectAll('text')
-                .data(nodes)
-                .enter()
-                .append('text')
-                .attr('class', 'device-label')
-                .text(d => `${d.name} (${d.ip})`)
-                .attr('dy', 25);
-
-            simulation.on('tick', () => {
-                if (myBuild !== diagramBuildToken) return; // invalidado
-                link.attr('x1', d => d.source.x)
-                    .attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x)
-                    .attr('y2', d => d.target.y);
-                node.attr('cx', d => d.x)
-                    .attr('cy', d => d.y);
-                labels.attr('x', d => d.x)
-                    .attr('y', d => d.y);
-            });
-
-            // Controles de zoom
+        function scanAllSaved() {
+            if (isScanning) return;
+            
+            isScanning = true;
+            updateScanButtons();
+            showLoading();
+            
+            fetch('/scan_all_saved', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    displayAllSavedResults(data);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Error scanning all saved networks');
                 })
                 .finally(() => {
                     isScanning = false;
@@ -790,20 +776,26 @@
                 .then(data => {
                     displaySavedNetworks(data.networks);
                 })
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
+                .catch(error => {
+                    console.error('Error loading saved networks:', error);
+                });
+        }
+
         function displaySavedNetworks(networks) {
             const container = document.getElementById('savedNetworksList');
             
-                d.fx = event.x;
-                d.fy = event.y;
+            if (networks.length === 0) {
+                container.innerHTML = '<p style="color: #666; font-style: italic;">No saved networks yet. Add some networks above!</p>';
+                return;
+            }
             
             let html = '';
             networks.forEach(network => {
                 html += `
-                d.fx = null;
-                d.fy = null;
+                    <div class="network-item">
+                        <div class="network-info">
+                            <div class="network-name">${network.name}</div>
+                            <div class="network-range">${network.network}</div>
                         </div>
                         <div class="network-actions">
                             <button class="btn-small btn-scan" onclick="scanSavedNetwork('${network.network}')">Scan</button>
