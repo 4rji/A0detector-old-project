@@ -1,0 +1,585 @@
+{% extends "base.html" %}
+
+{% block title %}Network Devices - Network Scanner{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <nav class="dashboard-nav">
+        <div class="nav-user">
+            <a href="{{ url_for('auth.logout') }}" class="logout-button">Logout</a>
+        </div>
+    </nav>
+    <div class="dashboard-content">
+        <h1>Network Devices Scanner</h1>
+        
+        <div class="control-panel">
+            <button id="scanNetworkBtn" class="scan-button">
+                <span class="scan-icon">⟳</span>
+                <span class="scan-text">Scan Network</span>
+            </button>
+            <div id="scanStatus" class="status-pill">Found 8 devices</div>
+        </div>
+        
+        <div class="network-diagram-container" id="network-diagram">
+            <!-- D3.js visualization will be rendered here -->
+            <div class="zoom-controls">
+                <button class="zoom-button" id="zoomIn">+</button>
+                <button class="zoom-button" id="zoomOut">-</button>
+                <button class="zoom-button" id="zoomReset">⟲</button>
+            </div>
+        </div>
+        
+        <div class="device-list-container">
+            <h2>Detected Devices</h2>
+            <div id="deviceList" class="device-list">
+                <!-- Device list will be populated here -->
+                <div class="no-devices">No devices detected yet. Click "Scan Network" to start.</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<style>
+.network-diagram-container {
+    height: 800px;
+    background-color: rgba(20, 20, 30, 0.9);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(78, 205, 196, 0.2);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.device-node {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.3));
+}
+
+.device-node:hover {
+    filter: brightness(1.2) drop-shadow(0 0 8px rgba(78, 205, 196, 0.5));
+}
+
+.device-node.subnet-0 { fill: #4ecdc4; }
+.device-node.subnet-1 { fill: #ff6b6b; }
+.device-node.subnet-2 { fill: #ffd93d; }
+.device-node.subnet-3 { fill: #6c5ce7; }
+.device-node.subnet-4 { fill: #a8e6cf; }
+
+.device-node.router {
+    filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.3));
+}
+
+.device-node.router:hover {
+    filter: brightness(1.2) drop-shadow(0 0 12px rgba(255, 107, 107, 0.5));
+}
+
+.device-node.core {
+    fill: #fff;
+    filter: drop-shadow(0 0 12px rgba(255, 217, 61, 0.3));
+}
+
+.device-node.core:hover {
+    filter: brightness(1.2) drop-shadow(0 0 16px rgba(255, 217, 61, 0.5));
+}
+
+.device-label {
+    pointer-events: none;
+    user-select: none;
+    fill: #fff;
+    font-size: 12px;
+    text-anchor: middle;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.connection-line {
+    stroke: rgba(78, 205, 196, 0.5);
+    stroke-width: 2;
+    transition: all 0.3s ease;
+}
+
+.connection-line.backbone {
+    stroke: rgba(255, 217, 61, 0.5);
+    stroke-width: 3;
+    stroke-dasharray: 5,5;
+}
+
+.connection-line:hover {
+    stroke-opacity: 1;
+}
+
+.zoom-controls {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    z-index: 10;
+}
+
+.zoom-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(78, 205, 196, 0.2);
+    border: 2px solid #4ecdc4;
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.zoom-button:hover {
+    background: rgba(78, 205, 196, 0.4);
+    transform: scale(1.1);
+}
+
+.control-panel {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: rgba(20, 20, 30, 0.9);
+    border-radius: 8px;
+    border: 1px solid rgba(78, 205, 196, 0.2);
+}
+
+.scan-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(45deg, #4ecdc4, #2cb5ac);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.scan-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(78, 205, 196, 0.3);
+}
+
+.scan-button:active {
+    transform: translateY(0);
+}
+
+.scan-icon {
+    font-size: 1.2rem;
+}
+
+.scan-button.scanning .scan-icon {
+    animation: spin 1s linear infinite;
+}
+
+.status-pill {
+    padding: 0.5rem 1rem;
+    background: rgba(78, 205, 196, 0.2);
+    border: 1px solid #4ecdc4;
+    border-radius: 20px;
+    color: #4ecdc4;
+    font-size: 0.9rem;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.device-list-container {
+    background: rgba(20, 20, 30, 0.9);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-top: 2rem;
+    border: 1px solid rgba(78, 205, 196, 0.2);
+}
+
+.device-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.device-card {
+    background: rgba(30, 30, 40, 0.8);
+    border: 1px solid rgba(78, 205, 196, 0.3);
+    border-radius: 6px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.device-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(78, 205, 196, 0.2);
+    border-color: rgba(78, 205, 196, 0.5);
+}
+
+.device-card.router {
+    border-color: rgba(255, 107, 107, 0.3);
+}
+
+.device-card.router:hover {
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.2);
+    border-color: rgba(255, 107, 107, 0.5);
+}
+
+.device-name {
+    color: #4ecdc4;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.device-card.router .device-name {
+    color: #ff6b6b;
+}
+
+.device-info {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.device-info span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.device-info i {
+    color: #4ecdc4;
+    width: 16px;
+}
+
+.device-card.router .device-info i {
+    color: #ff6b6b;
+}
+
+.no-devices {
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    padding: 2rem;
+    grid-column: 1 / -1;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const networkDiagram = document.getElementById('network-diagram');
+    const scanButton = document.getElementById('scanNetworkBtn');
+    const scanStatus = document.getElementById('scanStatus');
+    const deviceList = document.getElementById('deviceList');
+    let devices = [];
+    let svg, simulation;
+    let zoom = d3.zoom()
+        .scaleExtent([0.5, 3])
+        .on('zoom', (event) => {
+            svg.select('g').attr('transform', event.transform);
+        });
+
+    // Cargar el último escaneo al iniciar
+    async function loadLastScan() {
+        try {
+            const response = await fetch('/scan_network/last');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.devices) {
+                    devices = data.devices;
+                    const scanDate = new Date(data.timestamp).toLocaleString();
+                    scanStatus.textContent = `Last scan: ${scanDate} - Found ${devices.length} devices`;
+                    renderNetworkDiagram();
+                    updateDeviceList();
+                }
+            }
+        } catch (error) {
+            console.error('Error loading last scan:', error);
+            scanStatus.textContent = 'No previous scan found';
+        }
+    }
+
+    // Cargar el último escaneo al iniciar la página
+    loadLastScan();
+
+    function updateDeviceList() {
+        deviceList.innerHTML = '';
+        
+        if (devices.length === 0) {
+            deviceList.innerHTML = '<div class="no-devices">No devices detected yet. Click "Scan Network" to start.</div>';
+            return;
+        }
+
+        devices.forEach(device => {
+            const card = document.createElement('div');
+            card.className = `device-card ${device.type}`;
+            
+            card.innerHTML = `
+                <div class="device-name">${device.name}</div>
+                <div class="device-info">
+                    <span><i>🌐</i> ${device.ip}</span>
+                    <span><i>📱</i> ${device.type.charAt(0).toUpperCase() + device.type.slice(1)}</span>
+                    ${device.mac !== 'Unknown' ? `<span><i>💻</i> ${device.mac}</span>` : ''}
+                </div>
+            `;
+            
+            deviceList.appendChild(card);
+        });
+    }
+
+    async function scanNetwork() {
+        scanButton.classList.add('scanning');
+        scanButton.disabled = true;
+        scanStatus.textContent = 'Scanning...';
+        devices = []; // Limpiamos los dispositivos previos
+        updateDeviceList();
+        
+        try {
+            const response = await fetch('/scan_network', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to start network scan');
+            }
+
+            // Configurar SSE para recibir actualizaciones en tiempo real
+            const eventSource = new EventSource('/scan_network/events');
+            
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                if (data.device) {
+                    devices.push(data.device);
+                    renderNetworkDiagram();
+                    updateDeviceList();
+                    scanStatus.textContent = `Found ${devices.length} devices`;
+                } else if (data.status === 'complete') {
+                    eventSource.close();
+                    scanButton.classList.remove('scanning');
+                    scanButton.disabled = false;
+                    if (devices.length === 0) {
+                        scanStatus.textContent = 'No devices found';
+                        updateDeviceList();
+                    }
+                } else if (data.status === 'error') {
+                    eventSource.close();
+                    throw new Error(data.message || 'Scan failed');
+                }
+            };
+
+            eventSource.onerror = function() {
+                eventSource.close();
+                throw new Error('Connection to server lost');
+            };
+
+        } catch (error) {
+            console.error('Scan error:', error);
+            scanStatus.textContent = `Error: ${error.message}`;
+            scanButton.classList.remove('scanning');
+            scanButton.disabled = false;
+            updateDeviceList();
+        }
+    }
+
+    function renderNetworkDiagram() {
+        const containerWidth = networkDiagram.clientWidth;
+        const containerHeight = networkDiagram.clientHeight;
+
+        if (!svg) {
+            networkDiagram.innerHTML = '';
+            svg = d3.select(networkDiagram)
+                .append('svg')
+                .attr('width', containerWidth)
+                .attr('height', containerHeight)
+                .call(zoom);
+            svg.append('g');
+        }
+        const g = svg.select('g');
+
+        // Agrupar dispositivos por subnet
+        const devicesBySubnet = {};
+        devices.forEach(device => {
+            const subnet = device.ip.split('.').slice(0, 3).join('.');
+            if (!devicesBySubnet[subnet]) {
+                devicesBySubnet[subnet] = [];
+            }
+            devicesBySubnet[subnet].push(device);
+        });
+        
+        const subnets = Object.keys(devicesBySubnet);
+        const nodes = [];
+        const links = [];
+        
+        // Layout: asignamos a cada subnet su propia área horizontal
+        const margin = 100;
+        const availableWidth = containerWidth - 2 * margin;
+        const numSubnets = subnets.length;
+        const subnetAreaWidth = availableWidth / numSubnets;
+        const centerY = containerHeight / 2;
+
+        subnets.forEach((subnet, i) => {
+            // Calculamos la posición central para cada subnet
+            const centerX = margin + subnetAreaWidth * i + subnetAreaWidth / 2;
+            const subnetDevices = devicesBySubnet[subnet];
+            // Buscamos el router; en su defecto usaremos el primer dispositivo
+            let router = subnetDevices.find(d => d.type === 'router');
+            if (!router) {
+                router = subnetDevices[0];
+            }
+            // Asignamos un índice de subnet para aplicar el color
+            router.subnetIndex = i;
+            router.x = centerX;
+            router.y = centerY;
+            router.fx = centerX;
+            router.fy = centerY;
+            router.isRouter = true;
+            nodes.push(router);
+            
+            // Posicionar los demás dispositivos en un círculo alrededor del router
+            const deviceRadius = Math.min(subnetAreaWidth, containerHeight) * 0.3;
+            subnetDevices.forEach((device, j) => {
+                if (device === router) return;
+                device.subnetIndex = i;
+                const angle = (2 * Math.PI * j) / (subnetDevices.length - 1);
+                device.x = centerX + deviceRadius * Math.cos(angle);
+                device.y = centerY + deviceRadius * Math.sin(angle);
+                nodes.push(device);
+                links.push({
+                    source: router,
+                    target: device
+                });
+            });
+        });
+
+        // Configurar fuerza de la simulación
+        if (!simulation) {
+            simulation = d3.forceSimulation(nodes)
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("link", d3.forceLink(links).distance(100).strength(1))
+                .force("collision", d3.forceCollide().radius(40))
+                .force("x", d3.forceX(d => d.x).strength(0.1))
+                .force("y", d3.forceY(d => d.y).strength(0.1));
+        } else {
+            simulation.nodes(nodes);
+            simulation.force("link").links(links);
+            simulation.alpha(1).restart();
+        }
+
+        // Actualizar enlaces
+        const link = g.selectAll("line.connection-line")
+            .data(links);
+
+        const linkEnter = link.enter()
+            .append("line")
+            .attr("class", "connection-line");
+            
+        link.merge(linkEnter);
+        link.exit().remove();
+
+        // Actualizar nodos
+        const node = g.selectAll("circle.device-node")
+            .data(nodes, d => d.ip);
+
+        const nodeEnter = node.enter()
+            .append("circle")
+            .attr("r", d => d.isRouter ? 20 : 15)
+            .attr("class", d => {
+                let cls = "device-node";
+                if (d.type) cls += " " + d.type;
+                if (d.subnetIndex !== undefined) cls += " subnet-" + d.subnetIndex;
+                return cls;
+            });
+
+        node.merge(nodeEnter)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        node.exit().remove();
+
+        // Actualizar etiquetas
+        const label = g.selectAll("text.device-label")
+            .data(nodes, d => d.ip);
+
+        const labelEnter = label.enter()
+            .append("text")
+            .attr("class", "device-label")
+            .attr("dy", d => d.isRouter ? 30 : 25);
+
+        label.merge(labelEnter)
+            .text(d => {
+                return d.isRouter ? `${d.name} (${d.ip})` : d.name;
+            });
+            
+        label.exit().remove();
+
+        simulation.on("tick", () => {
+            g.selectAll("line.connection-line")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+                
+            g.selectAll("circle.device-node")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+                
+            g.selectAll("text.device-label")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y);
+        });
+    }
+
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        if (!d.isRouter) {
+            d.fx = null;
+            d.fy = null;
+        }
+    }
+
+    // Controles de zoom
+    document.getElementById('zoomIn').addEventListener('click', () => {
+        svg.transition().duration(300).call(zoom.scaleBy, 1.2);
+    });
+
+    document.getElementById('zoomOut').addEventListener('click', () => {
+        svg.transition().duration(300).call(zoom.scaleBy, 0.8);
+    });
+
+    document.getElementById('zoomReset').addEventListener('click', () => {
+        svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
+    });
+
+    scanButton.addEventListener('click', scanNetwork);
+});
+</script>
+{% endblock %}

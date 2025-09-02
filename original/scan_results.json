@@ -1,0 +1,124 @@
+{
+    "last_scan": {
+        "timestamp": "2025-09-02T14:52:32.427265",
+        "devices": [
+            {
+                "id": "188",
+                "name": "Device-188",
+                "ip": "192.168.142.188",
+                "mac": "Unknown",
+                "type": "device"
+            },
+            {
+                "id": "7",
+                "name": "Device-7",
+                "ip": "192.168.3.7",
+                "mac": "Unknown",
+                "type": "device"
+            },
+            {
+                "id": "1",
+                "name": "Device-1",
+                "ip": "192.168.3.1",
+                "mac": "Unknown",
+                "type": "router"
+            },
+            {
+                "id": "5",
+                "name": "Device-5",
+                "ip": "192.168.3.5",
+                "mac": "Unknown",
+                "type": "device"
+            },
+            {
+                "id": "4",
+                "name": "Device-4",
+                "ip": "192.168.3.4",
+                "mac": "Unknown",
+                "type": "device"
+            }
+        ]
+    },
+    "scan_history": [
+        {
+            "timestamp": "2025-09-02T14:52:32.427265",
+            "devices": [
+                {
+                    "id": "188",
+                    "name": "Device-188",
+                    "ip": "192.168.142.188",
+                    "mac": "Unknown",
+                    "type": "device"
+                },
+                {
+                    "id": "7",
+                    "name": "Device-7",
+                    "ip": "192.168.3.7",
+                    "mac": "Unknown",
+                    "type": "device"
+                },
+                {
+                    "id": "1",
+                    "name": "Device-1",
+                    "ip": "192.168.3.1",
+                    "mac": "Unknown",
+                    "type": "router"
+                },
+                {
+                    "id": "5",
+                    "name": "Device-5",
+                    "ip": "192.168.3.5",
+                    "mac": "Unknown",
+                    "type": "device"
+                },
+                {
+                    "id": "4",
+                    "name": "Device-4",
+                    "ip": "192.168.3.4",
+                    "mac": "Unknown",
+                    "type": "device"
+                }
+            ]
+        },
+        {
+            "timestamp": "2025-09-02T14:51:54.078976",
+            "devices": [
+                {
+                    "id": "188",
+                    "name": "Device-188",
+                    "ip": "192.168.142.188",
+                    "mac": "Unknown",
+                    "type": "device"
+                }
+            ]
+        },
+        {
+            "timestamp": "2025-09-02T14:34:05.404323",
+            "devices": [
+                {
+                    "id": "188",
+                    "name": "Device-188",
+                    "ip": "192.168.142.188",
+                    "mac": "Unknown",
+                    "type": "device"
+                }
+            ]
+        },
+        {
+            "timestamp": "2025-09-02T14:23:27.393121",
+            "devices": [
+                {
+                    "id": "188",
+                    "name": "Device-188",
+                    "ip": "192.168.142.188",
+                    "mac": "Unknown",
+                    "type": "device"
+                }
+            ]
+        },
+        {
+            "timestamp": "2025-04-29T23:28:55.348112",
+            "devices": []
+        }
+    ]
+}

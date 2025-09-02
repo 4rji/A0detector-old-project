@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+# Reqs: pip install requests
+
+import os, sys, json, ipaddress, requests
+
+ES_URL  = os.getenv("ES_URL",  "https://localhost:9200")
+ES_USER = os.getenv("ES_USER", "elastic")
+ES_PASS = os.getenv("ES_PASS", "rancid12")
+INDEX   = os.getenv("INDEX",   "filebeat-*")
+VERIFY  = os.getenv("VERIFY",  "") or False   # ruta a http_ca.crt o vacío para -k
+
+def is_private(ip: str) -> bool:
+    try:
+        ipobj = ipaddress.ip_address(ip)
+        return ipobj.is_private or ipobj.is_loopback or ipobj.is_link_local
+    except Exception:
+        return True  # ignora raros
+
+def get(d: dict, path: str) -> str:
+    cur = d
+    for p in path.split("."):
+        if isinstance(cur, dict) and p in cur:
+            cur = cur[p]
+        else:
+            return ""
+    return cur if isinstance(cur, str) else ""
+
+def pick(d: dict, *paths) -> str:
+    for p in paths:
+        v = get(d, p)
+        if v:
+            return v
+    return ""
+
+def parse_zeek_conn_tsv(line: str):
+    # Zeek conn.log (TSV): ts uid id.orig_h id.orig_p id.resp_h id.resp_p ...
+    if "\t" not in line:
+        return "", ""
+    f = line.split("\t")
+    if len(f) >= 6:
+        return f[2], f[4]
+    return "", ""
+
+def fetch_hits(size=10000):
+    q = {
+        "size": size,
+        "sort": [{"@timestamp": "desc"}],
+        "query": {
+            "bool": {
+                "must": [
+                    {"term": {"event.dataset": "zeek.conn"}},
+                    {"range": {"@timestamp": {"gte": "now-24h"}}}
+                ]
+            }
+        },
+        "_source": [
+            "@timestamp",
+            "source.ip", "destination.ip",
+            "id.orig_h", "id.resp_h",
+            "zeek.*",
+            "event.original", "message"
+        ]
+    }
+    r = requests.post(
+        f"{ES_URL}/{INDEX}/_search",
+        auth=(ES_USER, ES_PASS),
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(q),
+        verify=VERIFY
+    )
+    if r.status_code != 200:
+        print("Error:", r.status_code, r.text)
+        sys.exit(1)
+    return r.json().get("hits", {}).get("hits", [])
+
+def main():
+    hits = fetch_hits()
+    extern = set()
+
+    for h in hits:
+        s = h.get("_source", {})
+        src = pick(s, "source.ip", "id.orig_h", "zeek.orig_h")
+        dst = pick(s, "destination.ip", "id.resp_h", "zeek.resp_h")
+
+        if not src or not dst:
+            raw = pick(s, "event.original", "message")
+            if raw:
+                ps, pd = parse_zeek_conn_tsv(raw)
+                src = src or ps
+                dst = dst or pd
+
+        if not src or not dst:
+            continue
+
+        if (not is_private(src)) and is_private(dst):
+            extern.add(src)
+
+    for ip in sorted(extern):
+        print(ip)
+
+if __name__ == "__main__":
+    main()

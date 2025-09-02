@@ -135,6 +135,117 @@
             display: block;
         }
         
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: #f8f9fa;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .tab:hover:not(.active) {
+            background: #e9ecef;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .network-diagram {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 500px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(78, 205, 196, 0.2);
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .device-node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.3));
+        }
+        
+        .device-node:hover {
+            filter: brightness(1.2) drop-shadow(0 0 8px rgba(78, 205, 196, 0.5));
+        }
+        
+        .device-node.router {
+            filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.3));
+        }
+        
+        .device-node.router:hover {
+            filter: brightness(1.2) drop-shadow(0 0 12px rgba(255, 107, 107, 0.5));
+        }
+        
+        .device-label {
+            pointer-events: none;
+            user-select: none;
+            fill: #fff;
+            font-size: 12px;
+            text-anchor: middle;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            font-family: Arial, sans-serif;
+        }
+        
+        .connection-line {
+            stroke: rgba(78, 205, 196, 0.5);
+            stroke-width: 2;
+            transition: all 0.3s ease;
+        }
+        
+        .connection-line:hover {
+            stroke-opacity: 1;
+            stroke: rgba(78, 205, 196, 0.8);
+        }
+        
+        .zoom-controls {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+        
+        .zoom-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(78, 205, 196, 0.2);
+            border: 2px solid #4ecdc4;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .zoom-button:hover {
+            background: rgba(78, 205, 196, 0.4);
+            transform: scale(1.1);
+        }
+        
         .scan-button {
             background: #4CAF50;
             color: white;
@@ -276,22 +387,50 @@
             </div>
         </div>
     </div>
-    
+
     <div id="stats" class="stats" style="display: none;">
         <strong>Network:</strong> <span id="scannedNetwork">-</span> | 
         <strong>Devices Found:</strong> <span id="deviceCount">0</span>
     </div>
     
-    <div class="results">
-        <h3 class="results-header">📊 Scan Results</h3>
-        <div id="deviceList">
-            <div class="loading">
-                <p>Click "Auto Scan" to discover devices on your local network</p>
+    <!-- Pestañas -->
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('list')">📋 Device List</button>
+        <button class="tab" onclick="showTab('diagram')">🌐 Network Diagram</button>
+    </div>
+    
+    <!-- Contenido de pestañas -->
+    <div id="listTab" class="tab-content active">
+        <div class="results">
+            <h3 class="results-header">📊 Scan Results</h3>
+            <div id="deviceList">
+                <div class="loading">
+                    <p>Click "Auto Scan" to discover devices on your local network</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="diagramTab" class="tab-content">
+        <div class="results">
+            <h3 class="results-header">🌐 Network Visualization</h3>
+            <div id="networkDiagram" class="network-diagram">
+                <div class="zoom-controls">
+                    <button class="zoom-button" id="zoomIn">+</button>
+                    <button class="zoom-button" id="zoomOut">-</button>
+                    <button class="zoom-button" id="zoomReset">⟲</button>
+                </div>
+                <div id="diagramContent">
+                    <p style="color: #ccc; text-align: center; margin-top: 100px;">
+                        Run a network scan to see the visual diagram
+                    </p>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
+    <!-- Incluir D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>    <script>
         let isScanning = false;
 
         // Cargar redes guardadas al iniciar
@@ -309,6 +448,171 @@
             } else {
                 content.classList.add('open');
                 arrow.classList.add('open');
+            }
+        }
+
+        function showTab(tabName) {
+            // Ocultar todas las pestañas
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Desactivar todos los botones de pestaña
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Mostrar la pestaña seleccionada
+            if (tabName === 'list') {
+                document.getElementById('listTab').classList.add('active');
+                document.querySelector('.tab:first-child').classList.add('active');
+            } else if (tabName === 'diagram') {
+                document.getElementById('diagramTab').classList.add('active');
+                document.querySelector('.tab:last-child').classList.add('active');
+            }
+        }
+
+        function createNetworkDiagram(devices) {
+            const diagramContent = document.getElementById('diagramContent');
+            const diagram = document.getElementById('networkDiagram');
+            
+            // Limpiar contenido anterior
+            diagramContent.innerHTML = '';
+            
+            if (devices.length === 0) {
+                diagramContent.innerHTML = '<p style="color: #ccc; text-align: center; margin-top: 100px;">No devices found to display</p>';
+                return;
+            }
+            
+            // Configurar dimensiones
+            const containerWidth = diagram.clientWidth - 40; // Restar padding
+            const containerHeight = diagram.clientHeight - 40;
+            
+            // Crear SVG
+            const svg = d3.select(diagramContent)
+                .append('svg')
+                .attr('width', containerWidth)
+                .attr('height', containerHeight);
+            
+            // Configurar zoom
+            const zoom = d3.zoom()
+                .scaleExtent([0.5, 3])
+                .on('zoom', (event) => {
+                    g.attr('transform', event.transform);
+                });
+            
+            svg.call(zoom);
+            const g = svg.append('g');
+            
+            // Preparar datos
+            const nodes = [
+                { id: 'router', name: 'Router', type: 'router', ip: 'Gateway', fx: containerWidth / 2, fy: containerHeight / 2 }
+            ];
+            
+            devices.forEach((device, index) => {
+                nodes.push({
+                    id: device.ip,
+                    name: device.hostname === 'Unknown' ? device.ip.split('.').pop() : device.hostname,
+                    type: 'device',
+                    ip: device.ip,
+                    shortIP: device.ip.split('.').pop()
+                });
+            });
+            
+            // Crear enlaces (conectar todos los dispositivos al router)
+            const links = devices.map(device => ({
+                source: 'router',
+                target: device.ip
+            }));
+            
+            // Configurar simulación de fuerzas
+            const simulation = d3.forceSimulation(nodes)
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(containerWidth / 2, containerHeight / 2))
+                .force("link", d3.forceLink(links).id(d => d.id).distance(150).strength(0.8))
+                .force("collision", d3.forceCollide().radius(35));
+            
+            // Crear líneas de conexión
+            const link = g.selectAll("line")
+                .data(links)
+                .enter()
+                .append("line")
+                .attr("class", "connection-line");
+            
+            // Crear nodos
+            const node = g.selectAll("circle")
+                .data(nodes)
+                .enter()
+                .append("circle")
+                .attr("class", d => `device-node ${d.type}`)
+                .attr("r", d => d.type === 'router' ? 25 : 20)
+                .attr("fill", d => d.type === 'router' ? "#ff6b6b" : "#4ecdc4")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+            
+            // Agregar etiquetas
+            const labels = g.selectAll("text")
+                .data(nodes)
+                .enter()
+                .append("text")
+                .attr("class", "device-label")
+                .text(d => d.type === 'router' ? 'Router' : d.shortIP)
+                .attr("dy", 35);
+            
+            // Agregar tooltips
+            node.append("title")
+                .text(d => d.type === 'router' ? 'Network Gateway' : `IP: ${d.ip}\nHost: ${d.name}`);
+            
+            // Configurar eventos de simulación
+            simulation.on("tick", () => {
+                link.attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+                    
+                node.attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+                    
+                labels.attr("x", d => d.x)
+                      .attr("y", d => d.y);
+            });
+            
+            // Configurar controles de zoom
+            document.getElementById('zoomIn').onclick = () => {
+                svg.transition().duration(300).call(zoom.scaleBy, 1.2);
+            };
+            
+            document.getElementById('zoomOut').onclick = () => {
+                svg.transition().duration(300).call(zoom.scaleBy, 0.8);
+            };
+            
+            document.getElementById('zoomReset').onclick = () => {
+                svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
+            };
+            
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                if (d.type !== 'router') { // Solo permitir arrastrar dispositivos, no el router
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+            }
+            
+            function dragged(event, d) {
+                if (d.type !== 'router') {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+            }
+            
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                if (d.type !== 'router') {
+                    d.fx = null;
+                    d.fy = null;
+                }
             }
         }
 
@@ -589,6 +893,9 @@
             });
             
             deviceList.innerHTML = html;
+            
+            // Actualizar también el diagrama
+            createNetworkDiagram(data.devices);
         }
 
         function displayAllSavedResults(data) {
@@ -631,6 +938,9 @@
             });
             
             deviceList.innerHTML = html;
+            
+            // Actualizar también el diagrama para escaneos masivos
+            createNetworkDiagram(data.devices);
         }
 
         // Allow Enter key to trigger custom scan

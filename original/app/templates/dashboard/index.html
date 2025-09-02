@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Network Scanner{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <nav class="dashboard-nav">
+        <div class="nav-user">
+            <a href="{{ url_for('auth.logout') }}" class="logout-button">Logout</a>
+        </div>
+    </nav>
+    <div class="dashboard-content">
+        <h1>Network Scanner</h1>
+        <p>Select a section from the sidebar to get started.</p>
+    </div>
+</div>
+{% endblock %} 

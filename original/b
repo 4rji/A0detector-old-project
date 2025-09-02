@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+# Reqs: pip install requests
+
+import os, sys, json, requests
+
+ES_URL  = os.getenv("ES_URL",  "https://localhost:9200")
+ES_USER = os.getenv("ES_USER", "elastic")
+ES_PASS = os.getenv("ES_PASS", "changeme")  # cambia si aplica
+INDEX   = os.getenv("INDEX",   "filebeat-*")
+
+# Usa VERIFY o CA (ruta a http_ca.crt). Si no existe, aborta.
+VERIFY = os.getenv("VERIFY") or os.getenv("CA") or ""
+if not VERIFY or not os.path.exists(VERIFY):
+    print("ERROR: define VERIFY=/ruta/http_ca.crt (o CA=...) y que exista.", file=sys.stderr)
+    sys.exit(2)
+
+q = {
+    "size": int(os.getenv("SIZE", "5")),
+    "sort": [{"@timestamp": "desc"}],
+    "query": {"match_all": {}},
+    "_source": ["@timestamp","event.dataset","source.ip","destination.ip","message","event.original"]
+}
+
+try:
+    r = requests.post(
+        f"{ES_URL}/{INDEX}/_search",
+        auth=(ES_USER, ES_PASS),
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(q),
+        verify=VERIFY,
+        timeout=10
+    )
+except Exception as e:
+    print("ERROR:", e, file=sys.stderr)
+    sys.exit(1)
+
+if r.status_code != 200:
+    print(f"ERROR {r.status_code}:", r.text, file=sys.stderr)
+    sys.exit(1)
+
+hits = r.json().get("hits", {}).get("hits", [])
+if not hits:
+    print("sin datos")
+    sys.exit(0)
+
+for h in hits:
+    s = h.get("_source", {})
+    ts   = s.get("@timestamp", "")
+    ds   = s.get("event", {}).get("dataset", "")
+    src  = s.get("source", {}).get("ip", "")
+    dst  = s.get("destination", {}).get("ip", "")
+    line = f"{ts} [{ds}] {src} -> {dst}".strip()
+    if not src and not dst:
+        line = f"{ts} [{ds}] " + (s.get("message") or s.get("event", {}).get("original", "") or "<sin mensaje>")
+    print(line)
