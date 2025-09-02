@@ -101,7 +101,7 @@ source venv/bin/activate
 
 2. Iniciar la aplicación:
 ```bash
-python3 -m flask run --host=0.0.0.0
+python3 run.py
 ```
 
 La aplicación estará disponible en `http://localhost:5000`
